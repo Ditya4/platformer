@@ -16,18 +16,46 @@ class Player(pygame.sprite.Sprite):
         self.rect.left = left
         self.rect.top = top
         self.horizontal_speed = 0
+        self.vertical_speed = 0
 
     def change_speed(self, dx, dy):
         self.horizontal_speed += dx
+        self.vertical_speed += dy
+
+    def gravity(self, platforms):
+        if self.vertical_speed != 0:
+            self.vertical_speed += 0.37
+        else:
+            self.rect.top += 2
+            if pygame.sprite.spritecollide(self, platforms, False):
+                self.rect.top -= 2
 
     def move(self, platforms):
-        old_horizontal_pos = self.rect.left
+        self.gravity(platforms)
         self.rect.left += self.horizontal_speed
-        if pygame.sprite.spritecollideany(self, platforms) is not None:
-            self.rect.left = old_horizontal_pos
+        horizontal_collide_list = (
+                pygame.sprite.spritecollide(self, platforms, False))
+
+        for platform in horizontal_collide_list:
+            if self.horizontal_speed > 0:
+                self.rect.right = platform.rect.left
+            else:
+                self.rect.left = platform.rect.right
+            self.horizontal_speed = 0
+
+        self.rect.top += self.vertical_speed
+        vertical_collide_list = (
+                pygame.sprite.spritecollide(self, platforms, False))
+
+        for platform in vertical_collide_list:
+            if self.vertical_speed > 0:
+                self.rect.bottom = platform.rect.top
+            else:
+                self.rect.top = platform.rect.bottom
+            self.vertical_speed = 0
 
     def jump(self):
-        pass
+        self.change_speed(0, -10)
 
 
 class Platform(pygame.sprite.Sprite):
@@ -56,8 +84,8 @@ class Game():
     done = False
     platform_color = pygame.Color(4, 255, 252)
     # platform format: left, top, width, height, color
-    platforms = [[0, window_height - 20,
-                  window_width, 15, platform_color],
+    platforms = [[-500, window_height - 20,
+                  window_width * 2, 15, platform_color],
                  [window_width - 200, window_height - 60,
                   70, 30, platform_color]]
 
@@ -85,13 +113,16 @@ class Game():
                 if event.key == pygame.K_RIGHT:
                     self.player.change_speed(5, 0)
                 if event.key == pygame.K_UP:
-                    self.player.jump()
+                    if self.player.vertical_speed == 0:
+                        self.player.jump()
 
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT:
-                    self.player.change_speed(5, 0)
+                    if self.player.horizontal_speed != 0:
+                        self.player.change_speed(5, 0)
                 if event.key == pygame.K_RIGHT:
-                    self.player.change_speed(-5, 0)
+                    if self.player.horizontal_speed != 0:
+                        self.player.change_speed(-5, 0)
 
         self.player.move(self.platforms_group)
 
