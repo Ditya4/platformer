@@ -30,18 +30,59 @@ class Player(pygame.sprite.Sprite):
             if pygame.sprite.spritecollide(self, platforms, False):
                 self.rect.top -= 2
 
-    def move(self, platforms):
-        self.gravity(platforms)
-        self.rect.left += self.horizontal_speed
-        horizontal_collide_list = (
-                pygame.sprite.spritecollide(self, platforms, False))
+    def landscape_move(self, platforms, direction):
+        if self.horizontal_speed != 0:
+            if direction == "left":
+                for platform in platforms:
+                    platform.rect.left -= self.horizontal_speed
 
-        for platform in horizontal_collide_list:
-            if self.horizontal_speed > 0:
-                self.rect.right = platform.rect.left
-            else:
-                self.rect.left = platform.rect.right
-            self.horizontal_speed = 0
+                horizontal_collide_list = (
+                    pygame.sprite.spritecollide(self, platforms, False))
+                for platform in horizontal_collide_list:
+                    self.rect.left = platform.rect.right
+                    self.horizontal_speed = 0
+
+            elif direction == "right":
+                for platform in platforms:
+                    platform.rect.left -= self.horizontal_speed
+
+                horizontal_collide_list = (
+                    pygame.sprite.spritecollide(self, platforms, False))
+                for platform in horizontal_collide_list:
+                    self.rect.right = platform.rect.left
+                    self.horizontal_speed = 0
+
+    def move(self, platforms, game):
+        '''
+        If player.rect.left = left border and we are moving to the left
+        we move to the right platforms, not the player.
+        If player.rect.left = right border and we are moving to the right
+        we move to the left platforms, not the player.
+        In other cases we move player to the playef.horisontal_speed.
+
+        FIXME need to delete a possibility to make a jump during
+        player slide from platform while he is in the air.
+        '''
+        left_border = 50
+        right_border = game.window_width - self.rect.width - 50
+        self.gravity(platforms)
+        if (self.rect.left <= left_border and
+                self.horizontal_speed < 0):
+            self.landscape_move(platforms, "left")
+        elif (self.rect.left >= right_border and
+              self.horizontal_speed > 0):
+            self.landscape_move(platforms, "right")
+        else:
+            self.rect.left += self.horizontal_speed
+            horizontal_collide_list = (
+                    pygame.sprite.spritecollide(self, platforms, False))
+
+            for platform in horizontal_collide_list:
+                if self.horizontal_speed > 0:
+                    self.rect.right = platform.rect.left
+                else:
+                    self.rect.left = platform.rect.right
+                self.horizontal_speed = 0
 
         self.rect.top += self.vertical_speed
         vertical_collide_list = (
@@ -72,6 +113,54 @@ class Platform(pygame.sprite.Sprite):
         self.rect.top = top
 
 
+class MovingPlatform(Platform):
+
+    def __init__(self, left, top, width, height, color,
+                 left_bound, right_bound, top_bound, bottom_bound):
+        '''
+        first swing always from left to the right and from the top to the
+        bottom.
+        Those are two flags which said are we swinging in horizontal and
+        vertical space part
+        self.horizontal = False
+        self.vetrical = False
+
+        '''
+        super().__init__(left, top, width, height, color)
+        self.left_bound = left_bound
+        self.right_bound = right_bound
+        self.top_bound = top_bound
+        self.bottom_bound = bottom_bound
+        self.horizontal_step = {"normal": 1, "reverse": -1}
+        self.verical_step = {"normal": 1, "reverse": -1}
+        self.horizontal_direction = "normal"
+        self.vertical_direction = "normal"
+        # self.speed = [0, 0]
+        self.horizontal = False
+        self.vetrical = False
+        if self.left_bound != self.right_bound:
+            # self.speed[0] = 1
+            self.horizontal = True
+        if self.top_bound != self.bottom_bound:
+            # self.speed[1] = 1
+            self.vetrical = True
+
+    def swing(self):
+        if self.horizontal:
+            if self.rect.left < self.left_bound:
+                self.horizontal_direction = "normal"
+            elif self.rect.left > self.right_bound:
+                self.horizontal_direction = "reverse"
+            # if self.directions_index == "normal":
+            self.rect.left += self.horizontal_step[self.horizontal_direction]
+        if self.vetrical:
+            if self.rect.top < self.top_bound:
+                self.vertical_direction = "normal"
+            elif self.rect.top > self.bottom_bound:
+                self.vertical_direction = "reverse"
+            self.rect.top += self.verical_step[self.vertical_direction]
+
+
 class Game():
     window_width = 700
     window_height = 650
@@ -87,7 +176,17 @@ class Game():
     platforms = [[-500, window_height - 20,
                   window_width * 2, 15, platform_color],
                  [window_width - 200, window_height - 60,
-                  70, 30, platform_color]]
+                  150, 30, platform_color],
+                 [window_width - 400, window_height - 150,
+                  150, 30, platform_color],
+                 [-300, window_height - 60,
+                  150, 30, platform_color], ]
+    moving_platforms = [[300, window_height - 80,
+                        150, 30, platform_color,
+                        0, 0, 120, 450],
+                        [200, window_height - 80,
+                        150, 30, platform_color,
+                        20, 120, 0, 0], ]
 
     def __init__(self):
         self.clock = pygame.time.Clock()
@@ -101,6 +200,10 @@ class Game():
         self.player_group.add(self.player)
         for platform in self.platforms:
             self.platforms_group.add(Platform(*platform))
+
+        self.moving_platforms_group = pygame.sprite.Group()
+        for moving_platform in self.moving_platforms:
+            self.moving_platforms_group.add(MovingPlatform(*moving_platform))
 
     def process_events(self):
         for event in pygame.event.get():
@@ -124,7 +227,9 @@ class Game():
                     if self.player.horizontal_speed != 0:
                         self.player.change_speed(-5, 0)
 
-        self.player.move(self.platforms_group)
+        self.player.move(self.platforms_group, self)
+        for moving_platform in self.moving_platforms_group:
+            moving_platform.swing()
 
 
 def main():
@@ -136,6 +241,7 @@ def main():
         game.canvas.fill("black")
         game.platforms_group.draw(game.canvas)
         game.player_group.draw(game.canvas)
+        game.moving_platforms_group.draw(game.canvas)
 
         pygame.display.update()
         game.clock.tick(game.fps)
